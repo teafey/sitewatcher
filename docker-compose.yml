@@ -1,0 +1,18 @@
+services:
+  sitewatcher:
+    build: .
+    container_name: sitewatcher
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    networks:
+      - supabase_default
+      - default
+
+networks:
+  supabase_default:
+    external: true
