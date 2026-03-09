@@ -1,14 +1,28 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client";
+import ViewportPresets from "../components/ViewportPresets";
 
 export default function BulkImport() {
   const navigate = useNavigate();
   const [urls, setUrls] = useState("");
+  const [viewports, setViewports] = useState<{ width: number; height: number }[]>([
+    { width: 1920, height: 1080 },
+  ]);
   const [importing, setImporting] = useState(false);
   const [results, setResults] = useState<
     { url: string; success: boolean; error?: string }[]
   >([]);
+
+  function handleToggleViewport(w: number, h: number) {
+    setViewports((prev) => {
+      const exists = prev.some((v) => v.width === w && v.height === h);
+      if (exists) {
+        return prev.filter((v) => !(v.width === w && v.height === h));
+      }
+      return [...prev, { width: w, height: h }];
+    });
+  }
 
   async function handleImport() {
     const urlList = urls
@@ -29,10 +43,11 @@ export default function BulkImport() {
         await api.createPage({
           url,
           name: new URL(url).hostname,
-          viewport_width: 1920,
-          viewport_height: 1080,
+          viewports,
+          viewport_width: viewports[0].width,
+          viewport_height: viewports[0].height,
           diff_threshold: 0.5,
-        });
+        } as Parameters<typeof api.createPage>[0]);
         importResults.push({ url, success: true });
       } catch (err) {
         importResults.push({
@@ -55,6 +70,17 @@ export default function BulkImport() {
       <h1 className="text-xl font-bold mb-6">Массовый импорт</h1>
 
       <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-text-dim mb-2">
+            Viewport
+          </label>
+          <ViewportPresets
+            mode="multi"
+            selected={viewports}
+            onToggle={handleToggleViewport}
+          />
+        </div>
+
         <label className="block text-sm font-medium text-text-dim mb-2">
           URL-адреса (один на строку)
         </label>

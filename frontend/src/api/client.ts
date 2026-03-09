@@ -20,6 +20,7 @@ export interface Page {
   name: string | null;
   viewport_width: number;
   viewport_height: number;
+  viewports?: { width: number; height: number }[];
   check_interval_hours: number;
   diff_threshold: number;
   ignore_selectors: string[];
@@ -41,6 +42,8 @@ export interface Snapshot {
   diff_image_path: string | null;
   has_changes: boolean | null;
   error_message: string | null;
+  viewport_width?: number | null;
+  viewport_height?: number | null;
   captured_at: string;
 }
 
@@ -63,7 +66,13 @@ export const api = {
   // Snapshots
   getSnapshots: (
     pageId: string,
-    params?: { limit?: number; offset?: number; changes_only?: boolean }
+    params?: {
+      limit?: number;
+      offset?: number;
+      changes_only?: boolean;
+      viewport_width?: number;
+      viewport_height?: number;
+    }
   ) =>
     client
       .get<Snapshot[]>(`/snapshots/${pageId}`, { params })

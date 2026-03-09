@@ -84,9 +84,29 @@ export default function PageCard({ page, onDelete, onToggle }: Props) {
         </Link>
         <p className="text-xs text-text-muted truncate mt-1">{page.url}</p>
 
-        <div className="flex items-center gap-2 mt-2 text-xs text-text-dim">
-          <span>
-            {page.viewport_width}×{page.viewport_height}
+        <div className="flex items-center gap-2 mt-2 text-xs text-text-dim flex-wrap">
+          <span className="flex gap-1">
+            {(page.viewports && page.viewports.length > 0
+              ? page.viewports
+              : [{ width: page.viewport_width, height: page.viewport_height }]
+            ).map((v) => {
+              const label =
+                v.width === 1920 && v.height === 1080
+                  ? "Desktop"
+                  : v.width === 768 && v.height === 1024
+                    ? "Планшет"
+                    : v.width === 375 && v.height === 812
+                      ? "Мобильный"
+                      : `${v.width}×${v.height}`;
+              return (
+                <span
+                  key={`${v.width}x${v.height}`}
+                  className="inline-block px-1.5 py-0.5 bg-surface-2 border border-border rounded text-text-muted text-[10px]"
+                >
+                  {label}
+                </span>
+              );
+            })}
           </span>
           <span>·</span>
           <span>Порог: {page.diff_threshold}%</span>

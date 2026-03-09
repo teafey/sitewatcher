@@ -4,6 +4,7 @@ import api, { type Page, type Snapshot } from "../api/client";
 import SnapshotTimeline from "../components/SnapshotTimeline";
 import DiffViewer from "../components/DiffViewer";
 import TextDiff from "../components/TextDiff";
+import { getViewportLabel } from "../components/ViewportPresets";
 
 export default function PageDetail() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -18,6 +19,19 @@ export default function PageDetail() {
     "side-by-side"
   );
   const [checking, setChecking] = useState(false);
+  const [diffSlider, setDiffSlider] = useState(false);
+  const [activeViewport, setActiveViewport] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+
+  // Extract viewports from page
+  const viewports =
+    page?.viewports && page.viewports.length > 0
+      ? page.viewports
+      : page
+        ? [{ width: page.viewport_width, height: page.viewport_height }]
+        : [];
 
   const handleDeleteSnapshot = async (snap: Snapshot) => {
     try {
@@ -29,7 +43,9 @@ export default function PageDetail() {
           const replacement = next[idx] || next[idx - 1] || null;
           setSelectedSnapshot(replacement);
           const prevIdx = replacement ? next.indexOf(replacement) + 1 : -1;
-          setPrevSnapshot(prevIdx >= 0 && prevIdx < next.length ? next[prevIdx] : null);
+          setPrevSnapshot(
+            prevIdx >= 0 && prevIdx < next.length ? next[prevIdx] : null
+          );
         }
         return next;
       });
@@ -38,15 +54,32 @@ export default function PageDetail() {
     }
   };
 
-  const loadSnapshots = (selectFirst = true) => {
+  const loadSnapshots = (
+    vp?: { width: number; height: number } | null,
+    selectFirst = true
+  ) => {
     if (!pageId) return;
+    const viewport = vp ?? activeViewport;
+    const params: {
+      limit: number;
+      viewport_width?: number;
+      viewport_height?: number;
+    } = { limit: 50 };
+    if (viewport) {
+      params.viewport_width = viewport.width;
+      params.viewport_height = viewport.height;
+    }
     api
-      .getSnapshots(pageId, { limit: 50 })
+      .getSnapshots(pageId, params)
       .then((snaps) => {
         setSnapshots(snaps);
         if (selectFirst && snaps.length > 0) {
           setSelectedSnapshot(snaps[0]);
           if (snaps.length > 1) setPrevSnapshot(snaps[1]);
+          else setPrevSnapshot(null);
+        } else if (snaps.length === 0) {
+          setSelectedSnapshot(null);
+          setPrevSnapshot(null);
         }
       })
       .catch(console.error);
@@ -57,13 +90,21 @@ export default function PageDetail() {
     setChecking(true);
     try {
       await api.triggerCheckPage(page.id);
-      // Poll for new snapshot
       const prevCount = snapshots.length;
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
         try {
-          const snaps = await api.getSnapshots(page.id, { limit: 50 });
+          const params: {
+            limit: number;
+            viewport_width?: number;
+            viewport_height?: number;
+          } = { limit: 50 };
+          if (activeViewport) {
+            params.viewport_width = activeViewport.width;
+            params.viewport_height = activeViewport.height;
+          }
+          const snaps = await api.getSnapshots(page.id, params);
           if (snaps.length > prevCount || attempts >= 20) {
             clearInterval(poll);
             setSnapshots(snaps);
@@ -85,13 +126,33 @@ export default function PageDetail() {
 
   useEffect(() => {
     if (!pageId) return;
-    api.getPage(pageId).then(setPage).catch(console.error);
-    loadSnapshots();
+    api
+      .getPage(pageId)
+      .then((p) => {
+        setPage(p);
+        // Set initial active viewport
+        const vps =
+          p.viewports && p.viewports.length > 0
+            ? p.viewports
+            : [{ width: p.viewport_width, height: p.viewport_height }];
+        setActiveViewport(vps[0]);
+      })
+      .catch(console.error);
   }, [pageId]);
+
+  // Load snapshots when active viewport changes
+  useEffect(() => {
+    if (activeViewport && pageId) {
+      loadSnapshots(activeViewport);
+    }
+  }, [activeViewport?.width, activeViewport?.height, pageId]);
 
   useEffect(() => {
     if (selectedSnapshot?.id) {
-      api.getTextDiff(selectedSnapshot.id).then(setTextDiff).catch(console.error);
+      api
+        .getTextDiff(selectedSnapshot.id)
+        .then(setTextDiff)
+        .catch(console.error);
     }
   }, [selectedSnapshot?.id]);
 
@@ -126,9 +187,16 @@ export default function PageDetail() {
           <div>
             <h1 className="text-xl font-bold">{page.name || page.url}</h1>
             <p className="text-sm text-text-muted mt-1">{page.url}</p>
-            <div className="flex gap-4 mt-2 text-xs text-text-dim">
-              <span>
-                Viewport: {page.viewport_width}x{page.viewport_height}
+            <div className="flex gap-4 mt-2 text-xs text-text-dim flex-wrap">
+              <span className="flex gap-1">
+                {viewports.map((v) => (
+                  <span
+                    key={`${v.width}x${v.height}`}
+                    className="inline-block px-2 py-0.5 bg-surface-2 border border-border rounded text-text-muted"
+                  >
+                    {getViewportLabel(v.width, v.height)}
+                  </span>
+                ))}
               </span>
               <span>Порог: {page.diff_threshold}%</span>
               <span>Интервал: {page.check_interval_hours}ч</span>
@@ -152,6 +220,33 @@ export default function PageDetail() {
         </div>
       </div>
 
+      {/* Viewport tabs */}
+      {viewports.length > 1 && (
+        <div className="flex gap-2 mb-4">
+          {viewports.map((vp) => {
+            const isActive =
+              activeViewport?.width === vp.width &&
+              activeViewport?.height === vp.height;
+            return (
+              <button
+                key={`${vp.width}x${vp.height}`}
+                onClick={() => setActiveViewport(vp)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition ${
+                  isActive
+                    ? "bg-accent/20 text-accent-light border-accent/30"
+                    : "bg-surface text-text-dim border-border hover:border-accent/30"
+                }`}
+              >
+                {getViewportLabel(vp.width, vp.height)}{" "}
+                <span className="text-text-muted">
+                  {vp.width}×{vp.height}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Timeline */}
         <div className="lg:col-span-1">
@@ -170,7 +265,7 @@ export default function PageDetail() {
         {/* Diff viewer */}
         <div className="lg:col-span-3">
           {/* View mode toggle */}
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 items-center">
             {(
               [
                 ["side-by-side", "Рядом"],
@@ -190,6 +285,17 @@ export default function PageDetail() {
                 {label}
               </button>
             ))}
+            {viewMode === "diff" && (
+              <label className="flex items-center gap-1.5 text-xs text-text-muted ml-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={diffSlider}
+                  onChange={(e) => setDiffSlider(e.target.checked)}
+                  className="accent-accent w-3.5 h-3.5"
+                />
+                Слайдер
+              </label>
+            )}
           </div>
 
           {selectedSnapshot ? (
@@ -197,6 +303,7 @@ export default function PageDetail() {
               currentSnapshot={selectedSnapshot}
               previousSnapshot={prevSnapshot}
               mode={viewMode}
+              diffSlider={diffSlider}
             />
           ) : (
             <div className="text-text-muted text-center py-16">

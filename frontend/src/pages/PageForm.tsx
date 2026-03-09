@@ -10,8 +10,9 @@ export default function PageForm() {
 
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
-  const [viewportWidth, setViewportWidth] = useState(1920);
-  const [viewportHeight, setViewportHeight] = useState(1080);
+  const [viewports, setViewports] = useState<{ width: number; height: number }[]>([
+    { width: 1920, height: 1080 },
+  ]);
   const [diffThreshold, setDiffThreshold] = useState(0.5);
   const [ignoreSelectors, setIgnoreSelectors] = useState("");
   const [waitForSelector, setWaitForSelector] = useState("");
@@ -26,8 +27,12 @@ export default function PageForm() {
       api.getPage(pageId).then((page) => {
         setUrl(page.url);
         setName(page.name || "");
-        setViewportWidth(page.viewport_width);
-        setViewportHeight(page.viewport_height);
+        // Init viewports from page.viewports or fallback to single viewport
+        if (page.viewports && page.viewports.length > 0) {
+          setViewports(page.viewports);
+        } else {
+          setViewports([{ width: page.viewport_width, height: page.viewport_height }]);
+        }
         setDiffThreshold(page.diff_threshold);
         setIgnoreSelectors((page.ignore_selectors || []).join("\n"));
         setWaitForSelector(page.wait_for_selector || "");
@@ -39,15 +44,27 @@ export default function PageForm() {
     }
   }, [pageId]);
 
+  function handleToggleViewport(w: number, h: number) {
+    setViewports((prev) => {
+      const exists = prev.some((v) => v.width === w && v.height === h);
+      if (exists) {
+        return prev.filter((v) => !(v.width === w && v.height === h));
+      }
+      return [...prev, { width: w, height: h }];
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
 
-    const data = {
+    const data: Record<string, unknown> = {
       url,
       name: name || null,
-      viewport_width: viewportWidth,
-      viewport_height: viewportHeight,
+      viewports,
+      // Keep compat fields from first viewport
+      viewport_width: viewports[0].width,
+      viewport_height: viewports[0].height,
       diff_threshold: diffThreshold,
       ignore_selectors: ignoreSelectors
         .split("\n")
@@ -117,41 +134,10 @@ export default function PageForm() {
             Viewport
           </label>
           <ViewportPresets
-            onSelect={(w, h) => {
-              setViewportWidth(w);
-              setViewportHeight(h);
-            }}
-            activeWidth={viewportWidth}
-            activeHeight={viewportHeight}
+            mode="multi"
+            selected={viewports}
+            onToggle={handleToggleViewport}
           />
-          <div className="flex gap-3 mt-3">
-            <div className="flex-1">
-              <label className="block text-xs text-text-muted mb-1">
-                Ширина
-              </label>
-              <input
-                type="number"
-                value={viewportWidth}
-                onChange={(e) => setViewportWidth(Number(e.target.value))}
-                min={320}
-                max={3840}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs text-text-muted mb-1">
-                Высота
-              </label>
-              <input
-                type="number"
-                value={viewportHeight}
-                onChange={(e) => setViewportHeight(Number(e.target.value))}
-                min={240}
-                max={2160}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
-              />
-            </div>
-          </div>
         </div>
 
         {/* Threshold */}

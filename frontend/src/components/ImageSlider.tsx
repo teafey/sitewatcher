@@ -3,9 +3,10 @@ import { useRef, useState, useCallback } from "react";
 interface Props {
   beforeUrl: string;
   afterUrl: string;
+  overlayUrl?: string;
 }
 
-export default function ImageSlider({ beforeUrl, afterUrl }: Props) {
+export default function ImageSlider({ beforeUrl, afterUrl, overlayUrl }: Props) {
   const [position, setPosition] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -48,7 +49,16 @@ export default function ImageSlider({ beforeUrl, afterUrl }: Props) {
       onTouchMove={handleTouchMove}
     >
       {/* After (full width) */}
-      <img src={afterUrl} alt="After" className="w-full block" />
+      <div className="relative">
+        <img src={afterUrl} alt="After" className="w-full block" />
+        {overlayUrl && (
+          <img
+            src={overlayUrl}
+            alt="Diff overlay"
+            className="absolute top-0 left-0 w-full h-full opacity-40 mix-blend-multiply"
+          />
+        )}
+      </div>
 
       {/* Before (clipped) */}
       <div

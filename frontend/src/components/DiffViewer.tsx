@@ -6,6 +6,7 @@ interface Props {
   currentSnapshot: Snapshot;
   previousSnapshot: Snapshot | null;
   mode: "side-by-side" | "overlay" | "diff";
+  diffSlider?: boolean;
 }
 
 function NoScreenshot({ label }: { label: string }) {
@@ -25,6 +26,7 @@ export default function DiffViewer({
   currentSnapshot,
   previousSnapshot,
   mode,
+  diffSlider,
 }: Props) {
   const hasCurrentScreenshot = currentSnapshot.screenshot_path && !currentSnapshot.error_message;
   const hasPrevScreenshot = previousSnapshot?.screenshot_path && !previousSnapshot?.error_message;
@@ -47,7 +49,21 @@ export default function DiffViewer({
     );
   }
 
-  if (mode === "diff" && diffUrl) {
+  if (mode === "diff") {
+    if (!diffUrl) {
+      return (
+        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+          Нет данных для сравнения — это первый снимок или diff-изображение недоступно
+        </div>
+      );
+    }
+    if (diffSlider && previousUrl && currentUrl) {
+      return (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <ImageSlider beforeUrl={previousUrl} afterUrl={currentUrl} overlayUrl={diffUrl} />
+        </div>
+      );
+    }
     return (
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
         <img src={diffUrl} alt="Diff" className="w-full" />
@@ -55,10 +71,17 @@ export default function DiffViewer({
     );
   }
 
-  if (mode === "overlay" && previousUrl && currentUrl) {
+  if (mode === "overlay") {
+    if (previousUrl && currentUrl) {
+      return (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <ImageSlider beforeUrl={previousUrl} afterUrl={currentUrl} />
+        </div>
+      );
+    }
     return (
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <ImageSlider beforeUrl={previousUrl} afterUrl={currentUrl} />
+      <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+        Нет предыдущего снимка для сравнения
       </div>
     );
   }
