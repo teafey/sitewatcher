@@ -5,17 +5,21 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routes.pages import router as pages_router
 from src.api.routes.snapshots import router as snapshots_router, stats_router
 from src.api.schemas import CheckResponse, HealthResponse
 from src.config import settings
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +147,7 @@ app.add_middleware(
 async def api_key_middleware(request: Request, call_next):
     # Skip auth for health endpoint and static files
     path = request.url.path
-    if path in ("/api/health", "/docs", "/openapi.json") or path.startswith("/static"):
+    if path in ("/api/health", "/docs", "/openapi.json") or path.startswith("/static") or path.startswith("/assets") or path == "/":
         return await call_next(request)
 
     if settings.api_key:
@@ -197,3 +201,16 @@ async def health():
         errors_count=results.get("errors", 0),
         uptime_seconds=round(uptime, 1),
     )
+
+
+# --- Serve frontend ---
+if FRONTEND_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="frontend-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        """SPA catch-all: serve index.html for any non-API route."""
+        file = FRONTEND_DIR / full_path
+        if file.is_file():
+            return FileResponse(file)
+        return FileResponse(FRONTEND_DIR / "index.html")

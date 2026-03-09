@@ -10,7 +10,7 @@ SiteWatcher is a visual web page change monitoring system. It captures screensho
 
 ### Docker (primary workflow)
 ```bash
-make build          # docker compose build
+make build          # docker compose build (multi-stage: Node frontend + Python backend)
 make up             # docker compose up -d
 make down           # docker compose down
 make logs           # docker compose logs -f sitewatcher
@@ -35,48 +35,52 @@ pytest tests/test_diff.py::test_identical_images_zero_diff  # single test
 ```bash
 cd frontend
 npm install
-npm run dev          # vite dev server
+npm run dev          # vite dev server (proxies /api and /static to localhost:9900)
 npm run build        # tsc && vite build
 ```
 
 ## Architecture
 
+### Deployment
+Single Docker container serves both API and frontend. Docker maps port **9900 → 8000** internally. The frontend is built in a Node multi-stage step and served by FastAPI as static files with an SPA catch-all route. Container connects to external `supabase_default` network for DB access.
+
 ### Backend (`src/`)
-- **`api/main.py`** — FastAPI app with APScheduler, API key auth middleware, CORS, lifespan management
+- **`api/main.py`** — FastAPI app with APScheduler, API key auth middleware (`X-API-Key` header), CORS, lifespan management. Serves frontend from `frontend/dist/` with SPA catch-all
 - **`api/routes/`** — REST endpoints for pages, snapshots, stats, and check triggers
-- **`api/schemas.py`** — Pydantic request/response models
-- **`pipeline.py`** — Orchestrates the check cycle: capture → compare → notify (with retry/backoff)
-- **`capture.py`** — Playwright sync API: headless Chromium screenshots + DOM text extraction
+- **`api/schemas.py`** — Pydantic v2 request/response models
+- **`pipeline.py`** — Orchestrates the check cycle: capture → compare → notify (with retry/backoff). Bridges async FastAPI with sync Playwright via `ThreadPoolExecutor`
+- **`capture.py`** — Playwright **sync** API: headless Chromium screenshots + DOM text extraction. Supports scroll-to-bottom, wait-for-selector, ignore-selectors, multi-viewport
 - **`diff.py`** — Pixel diff (NumPy array comparison with tolerance) and text diff (unified_diff). Generates visual diff overlay images
-- **`db.py`** — Async httpx client talking to Supabase REST API (`/rest/v1/`)
+- **`db.py`** — Async httpx client talking to Supabase REST API (`/rest/v1/`), no ORM
 - **`notify/`** — Extensible notifiers via `BaseNotifier` abstract class (Telegram, Bitrix24)
 - **`retention.py`** — Snapshot cleanup: keeps latest + up to 30 with changes
 - **`config.py`** — pydantic-settings `Settings` from env vars
-- **`main.py`** — CLI entry point
+- **`main.py`** — CLI entry point with JSON logging setup
 
 ### Frontend (`frontend/src/`)
-- React 18 + TypeScript + Vite + Tailwind CSS (dark theme)
-- React Router for client routing (`App.tsx`)
+- React 18 + TypeScript + Vite + Tailwind CSS
+- React Router v7 for client routing (`App.tsx`)
 - `api/client.ts` — Axios client with API key from localStorage
 - `pages/` — PagesList, PageDetail, PageForm, BulkImport
-- `components/` — DiffViewer (3 modes: side-by-side, overlay slider, diff overlay), SnapshotTimeline, ImageSlider, TextDiff, StatusBar
+- `components/` — DiffViewer (3 modes: side-by-side, overlay slider, diff overlay), SnapshotTimeline, ImageSlider, TextDiff, StatusBar, PageCard, ViewportPresets
 
 ### Database (Supabase PostgreSQL)
-- `pages` table — URL, viewport config, check interval, diff threshold, ignore_selectors
-- `snapshots` table — screenshot_path, dom_text/hash, diff_percent, diff_image_path, text_diff, has_changes
-- Migrations in `migrations/` (001_initial.sql, 002_seed.sql)
+- `pages` table — URL, name, viewports (JSONB array), check interval, diff threshold, ignore_selectors, scroll/wait options
+- `snapshots` table — screenshot_path, dom_text/hash, diff_percent, diff_image_path, has_changes, viewport dimensions, error_message
+- Migrations in `migrations/` (001–004: initial schema, seed, capture options, multi-viewport)
 
 ### Key data flow
-`APScheduler` → `pipeline.run_check_cycle()` → for each active page: `capture.capture_page()` (Playwright) → `diff.compare()` (pixel + text) → save snapshot to DB → `notify` if changes exceed threshold
+`APScheduler` → `pipeline.run_check_cycle()` → for each active page: `capture.capture_page()` (Playwright in ThreadPoolExecutor) → `diff.compare()` (pixel + text) → `db.save_snapshot()` (Supabase REST) → `notify` if changes exceed threshold
 
 ## Configuration
 
-Copy `.env.example` to `.env`. Key vars: `SUPABASE_URL`, `SUPABASE_KEY`, `API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `CHECK_INTERVAL_HOURS`, `DATA_DIR`.
+Copy `.env.example` to `.env`. Key vars: `SUPABASE_URL`, `SUPABASE_KEY`, `API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `CHECK_INTERVAL_HOURS`, `DATA_DIR`, `DASHBOARD_URL`.
 
 ## Conventions
 
-- Backend uses async/await throughout (httpx, FastAPI)
+- Backend uses async/await throughout (httpx, FastAPI); Playwright is sync, wrapped in ThreadPoolExecutor
 - Dataclasses for typed results (`CaptureResult`, `CompareResult`, `PixelDiffResult`, `TextDiffResult`)
-- JSON logging with timestamps
-- Snapshots stored as files in `DATA_DIR` (mounted volume `/app/data`)
-- App runs in a single Docker container connecting to an external Supabase network
+- JSON logging with timestamps via custom `JsonFormatter`
+- Snapshots stored as PNG files in `DATA_DIR` (mounted volume `/app/data`)
+- No linting/formatting tools configured — no eslint, prettier, black, or flake8
+- Tests are backend-only (pytest), located in `tests/`

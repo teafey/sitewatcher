@@ -1,3 +1,12 @@
+## --- Frontend build stage ---
+FROM node:20-slim AS frontend
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+COPY frontend/ .
+RUN npm run build
+
+## --- Backend stage ---
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -36,6 +45,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install chromium
 
 COPY . .
+
+# Copy built frontend from first stage
+COPY --from=frontend /app/frontend/dist /app/frontend/dist
 
 # Create data directory
 RUN mkdir -p /app/data

@@ -9,7 +9,14 @@
 
 ## 1. Настройка Supabase
 
-### Вариант A: Локальный Supabase (рекомендуется для разработки)
+### Вариант A: Облачный Supabase
+
+1. Создать проект на [supabase.com](https://supabase.com)
+2. Взять `URL` и `service_role key` из Settings → API
+
+Работает с `docker-compose.yml` без изменений.
+
+### Вариант B: Локальный Supabase (для разработки)
 
 ```bash
 npx supabase init
@@ -18,36 +25,36 @@ npx supabase start
 
 После запуска в терминале появятся `API URL` и `service_role key` — они понадобятся для `.env`.
 
-Локальный Supabase создаёт Docker-сеть `supabase_default`, которую использует SiteWatcher для подключения.
-
-### Вариант B: Облачный Supabase
-
-1. Создать проект на [supabase.com](https://supabase.com)
-2. Взять `URL` и `service_role key` из Settings → API
-
-При использовании облачного Supabase нужно убрать внешнюю сеть из `docker-compose.yml`:
+Локальный Supabase создаёт Docker-сеть `supabase_default`. Чтобы SiteWatcher мог подключиться, добавьте в `docker-compose.yml`:
 
 ```yaml
-# Удалить или закомментировать:
+services:
+  sitewatcher:
+    # ... существующие настройки ...
+    networks:
+      - supabase_default
+
 networks:
   supabase_default:
     external: true
-
-# И убрать supabase_default из секции networks сервиса sitewatcher
 ```
 
 ## 2. Применение миграций
 
-Выполнить SQL-файлы в Supabase SQL Editor (Dashboard → SQL Editor → New Query):
+Выполнить SQL-файлы **по порядку** в Supabase SQL Editor (Dashboard → SQL Editor → New Query):
 
-1. **Создание таблиц** — скопировать и выполнить содержимое `migrations/001_initial.sql`
-2. **Тестовые данные** (опционально) — выполнить `migrations/002_seed.sql`
+1. **Создание таблиц** — `migrations/001_initial.sql`
+2. **Тестовые данные** (опционально) — `migrations/002_seed.sql`
+3. **Настройки захвата** — `migrations/003_capture_options.sql` (scroll, wait)
+4. **Мульти-viewport** — `migrations/004_multi_viewport.sql` (несколько разрешений экрана)
 
-Или через Supabase CLI:
+Или через CLI:
 
 ```bash
 psql "$DATABASE_URL" -f migrations/001_initial.sql
 psql "$DATABASE_URL" -f migrations/002_seed.sql
+psql "$DATABASE_URL" -f migrations/003_capture_options.sql
+psql "$DATABASE_URL" -f migrations/004_multi_viewport.sql
 ```
 
 ## 3. Настройка окружения
@@ -66,22 +73,22 @@ cp .env.example .env
 | `TELEGRAM_BOT_TOKEN` | нет | Токен Telegram-бота для уведомлений |
 | `TELEGRAM_CHAT_ID` | нет | ID чата/группы для уведомлений |
 | `BITRIX_WEBHOOK_URL` | нет | URL вебхука Bitrix24 |
-| `DASHBOARD_URL` | нет | URL дашборда для ссылок в уведомлениях (по умолчанию `http://localhost:8000`) |
+| `DASHBOARD_URL` | нет | URL дашборда для ссылок в уведомлениях (по умолчанию `http://localhost:9900`) |
 | `CHECK_INTERVAL_HOURS` | нет | Интервал проверок в часах (по умолчанию `24`) |
-| `DATA_DIR` | нет | Путь для хранения скриншотов (по умолчанию `/app/data`) |
+| `DATA_DIR` | нет | Путь для хранения скриншотов (по умолчанию `./data`, в Docker = `/app/data`) |
 
 ## 4. Сборка и запуск
 
 ```bash
 make build    # собрать Docker-образ (~2-3 мин, устанавливает Playwright + Chromium)
-make up       # запустить контейнер на порту 8000
+make up       # запустить контейнер (порт 9900 → 8000 внутри)
 ```
 
 ## 5. Проверка работоспособности
 
 ```bash
 # Проверить что сервер запустился
-curl http://localhost:8000/api/health
+curl http://localhost:9900/api/health
 
 # Посмотреть логи
 make logs
@@ -98,7 +105,7 @@ make logs
 ### Добавить страницу для мониторинга
 
 ```bash
-curl -X POST http://localhost:8000/api/pages \
+curl -X POST http://localhost:9900/api/pages \
   -H "X-API-Key: <ваш API_KEY из .env>" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com", "name": "Тестовая страница"}'
@@ -113,13 +120,13 @@ curl -X POST http://localhost:8000/api/pages \
 make check
 
 # Или проверить конкретную страницу через API
-curl -X POST http://localhost:8000/api/check/<page_id> \
+curl -X POST http://localhost:9900/api/check/<page_id> \
   -H "X-API-Key: <ваш API_KEY>"
 ```
 
 ### Открыть дашборд
 
-Перейти в браузере на `http://localhost:8000` — откроется React-дашборд со списком страниц, таймлайном снимков и визуальным сравнением.
+Перейти в браузере на `http://localhost:9900` — откроется React-дашборд со списком страниц, таймлайном снимков и визуальным сравнением.
 
 ## 7. Запуск тестов
 
@@ -144,8 +151,8 @@ pytest tests/
 
 | Проблема | Решение |
 |---|---|
-| `network supabase_default not found` | Локальный Supabase не запущен (`npx supabase start`), либо используется облачный — убрать внешнюю сеть из `docker-compose.yml` |
+| `network supabase_default not found` | Используется локальный Supabase, но сеть не добавлена в `docker-compose.yml` (см. раздел 1, Вариант B), либо Supabase не запущен (`npx supabase start`) |
 | API возвращает `401 Unauthorized` | Не передан заголовок `X-API-Key` или значение не совпадает с `API_KEY` в `.env` |
 | Скриншоты не создаются | Проверить логи (`make logs`) — обычно проблема с доступом к URL или Playwright/Chromium |
 | Уведомления не приходят | Telegram: проверить `TELEGRAM_BOT_TOKEN` и `TELEGRAM_CHAT_ID`. Бот должен быть добавлен в чат |
-| Порт 8000 занят | Изменить маппинг портов в `docker-compose.yml`: `"8001:8000"` |
+| Порт 9900 занят | Изменить маппинг портов в `docker-compose.yml`: `"9901:8000"` |
