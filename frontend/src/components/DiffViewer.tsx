@@ -1,0 +1,116 @@
+import type { Snapshot } from "../api/client";
+import api from "../api/client";
+import ImageSlider from "./ImageSlider";
+
+interface Props {
+  currentSnapshot: Snapshot;
+  previousSnapshot: Snapshot | null;
+  mode: "side-by-side" | "overlay" | "diff";
+  diffSlider?: boolean;
+}
+
+function NoScreenshot({ label }: { label: string }) {
+  return (
+    <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="text-xs text-text-muted px-3 py-2 border-b border-border">
+        {label}
+      </div>
+      <div className="h-48 flex items-center justify-center text-text-muted text-sm">
+        Нет скриншота
+      </div>
+    </div>
+  );
+}
+
+export default function DiffViewer({
+  currentSnapshot,
+  previousSnapshot,
+  mode,
+  diffSlider,
+}: Props) {
+  const hasCurrentScreenshot = currentSnapshot.screenshot_path && !currentSnapshot.error_message;
+  const hasPrevScreenshot = previousSnapshot?.screenshot_path && !previousSnapshot?.error_message;
+
+  const currentUrl = hasCurrentScreenshot
+    ? api.getScreenshotUrl(currentSnapshot.id)
+    : null;
+  const previousUrl = hasPrevScreenshot
+    ? api.getScreenshotUrl(previousSnapshot!.id)
+    : null;
+  const diffUrl = currentSnapshot.diff_image_path
+    ? api.getDiffImageUrl(currentSnapshot.id)
+    : null;
+
+  if (!currentUrl && !previousUrl) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+        Нет скриншота
+      </div>
+    );
+  }
+
+  if (mode === "diff") {
+    if (!diffUrl) {
+      return (
+        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+          Нет данных для сравнения — это первый снимок или diff-изображение недоступно
+        </div>
+      );
+    }
+    if (diffSlider && previousUrl && currentUrl) {
+      return (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <ImageSlider beforeUrl={previousUrl} afterUrl={currentUrl} overlayUrl={diffUrl} />
+        </div>
+      );
+    }
+    return (
+      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <img src={diffUrl} alt="Diff" className="w-full" />
+      </div>
+    );
+  }
+
+  if (mode === "overlay") {
+    if (previousUrl && currentUrl) {
+      return (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <ImageSlider beforeUrl={previousUrl} afterUrl={currentUrl} />
+        </div>
+      );
+    }
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
+        Нет предыдущего снимка для сравнения
+      </div>
+    );
+  }
+
+  // Side-by-side (default)
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+      {previousSnapshot ? (
+        previousUrl ? (
+          <div className="bg-surface border border-border rounded-xl overflow-hidden">
+            <div className="text-xs text-text-muted px-3 py-2 border-b border-border">
+              Предыдущий
+            </div>
+            <img src={previousUrl} alt="Предыдущий" className="w-full h-auto" />
+          </div>
+        ) : (
+          <NoScreenshot label="Предыдущий" />
+        )
+      ) : null}
+      {currentUrl ? (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="text-xs text-text-muted px-3 py-2 border-b border-border">
+            Текущий
+          </div>
+          <img src={currentUrl} alt="Текущий" className="w-full h-auto" />
+        </div>
+      ) : (
+        <NoScreenshot label="Текущий" />
+      )}
+    </div>
+  );
+}

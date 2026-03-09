@@ -1,0 +1,11 @@
+services:
+  sitewatcher:
+    build: .
+    container_name: sitewatcher
+    restart: unless-stopped
+    ports:
+      - "9900:8000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
