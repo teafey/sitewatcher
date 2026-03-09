@@ -73,6 +73,7 @@ export const api = {
     client
       .get<string>(`/snapshots/detail/${id}/text-diff`)
       .then((r) => r.data),
+  deleteSnapshot: (id: string) => client.delete(`/snapshots/detail/${id}`),
 
   // Stats
   getStats: () => client.get<Stats>("/stats").then((r) => r.data),

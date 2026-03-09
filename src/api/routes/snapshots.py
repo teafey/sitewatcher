@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -70,6 +71,26 @@ async def get_text_diff(snapshot_id: str):
 
     text_diff = snapshot.get("text_diff") or ""
     return PlainTextResponse(text_diff)
+
+
+@router.delete("/detail/{snapshot_id}")
+async def delete_snapshot(snapshot_id: str):
+    snapshot = await db.get_snapshot(snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+
+    # Delete files from disk
+    for path_key in ("screenshot_path", "diff_image_path"):
+        path_str = snapshot.get(path_key)
+        if path_str:
+            path = Path(path_str)
+            if path.exists():
+                parent = path.parent
+                if parent.exists():
+                    shutil.rmtree(parent, ignore_errors=True)
+
+    await db.delete_snapshot(snapshot_id)
+    return {"ok": True}
 
 
 stats_router = APIRouter(tags=["stats"])

@@ -19,6 +19,25 @@ export default function PageDetail() {
   );
   const [checking, setChecking] = useState(false);
 
+  const handleDeleteSnapshot = async (snap: Snapshot) => {
+    try {
+      await api.deleteSnapshot(snap.id);
+      setSnapshots((prev) => {
+        const next = prev.filter((s) => s.id !== snap.id);
+        if (selectedSnapshot?.id === snap.id) {
+          const idx = prev.findIndex((s) => s.id === snap.id);
+          const replacement = next[idx] || next[idx - 1] || null;
+          setSelectedSnapshot(replacement);
+          const prevIdx = replacement ? next.indexOf(replacement) + 1 : -1;
+          setPrevSnapshot(prevIdx >= 0 && prevIdx < next.length ? next[prevIdx] : null);
+        }
+        return next;
+      });
+    } catch (err) {
+      console.error("Failed to delete snapshot", err);
+    }
+  };
+
   const loadSnapshots = (selectFirst = true) => {
     if (!pageId) return;
     api
@@ -144,6 +163,7 @@ export default function PageDetail() {
               setSelectedSnapshot(snap);
               setPrevSnapshot(snapshots[idx + 1] || null);
             }}
+            onDelete={handleDeleteSnapshot}
           />
         </div>
 
