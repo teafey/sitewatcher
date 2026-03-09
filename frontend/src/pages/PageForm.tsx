@@ -17,6 +17,9 @@ export default function PageForm() {
   const [waitForSelector, setWaitForSelector] = useState("");
   const [checkInterval, setCheckInterval] = useState(24);
   const [saving, setSaving] = useState(false);
+  const [scrollToBottom, setScrollToBottom] = useState(true);
+  const [maxScrolls, setMaxScrolls] = useState(10);
+  const [waitSeconds, setWaitSeconds] = useState(3);
 
   useEffect(() => {
     if (pageId) {
@@ -29,6 +32,9 @@ export default function PageForm() {
         setIgnoreSelectors((page.ignore_selectors || []).join("\n"));
         setWaitForSelector(page.wait_for_selector || "");
         setCheckInterval(page.check_interval_hours);
+        setScrollToBottom(page.scroll_to_bottom ?? true);
+        setMaxScrolls(page.max_scrolls ?? 10);
+        setWaitSeconds(page.wait_seconds ?? 3);
       });
     }
   }, [pageId]);
@@ -49,6 +55,9 @@ export default function PageForm() {
         .filter(Boolean),
       wait_for_selector: waitForSelector || null,
       check_interval_hours: checkInterval,
+      scroll_to_bottom: scrollToBottom,
+      max_scrolls: maxScrolls,
+      wait_seconds: waitSeconds,
     };
 
     try {
@@ -209,6 +218,55 @@ export default function PageForm() {
             placeholder="#main-content"
             className="w-full bg-surface-2 border border-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent font-mono"
           />
+        </div>
+
+        {/* Capture settings */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-text-dim">Настройки загрузки</h3>
+
+          {/* Scroll toggle */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={scrollToBottom}
+              onChange={(e) => setScrollToBottom(e.target.checked)}
+              className="w-4 h-4 accent-accent"
+            />
+            <span className="text-sm text-white">
+              Прокручивать страницу (для lazy-load контента)
+            </span>
+          </label>
+
+          {scrollToBottom && (
+            <div>
+              <label className="block text-xs text-text-muted mb-1">
+                Максимум прокруток (экранов)
+              </label>
+              <input
+                type="number"
+                value={maxScrolls}
+                onChange={(e) => setMaxScrolls(Number(e.target.value))}
+                min={1}
+                max={100}
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
+              />
+            </div>
+          )}
+
+          {/* Wait seconds */}
+          <div>
+            <label className="block text-xs text-text-muted mb-1">
+              Ожидание после загрузки (сек)
+            </label>
+            <input
+              type="number"
+              value={waitSeconds}
+              onChange={(e) => setWaitSeconds(Number(e.target.value))}
+              min={1}
+              max={30}
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
+            />
+          </div>
         </div>
 
         {/* Submit */}

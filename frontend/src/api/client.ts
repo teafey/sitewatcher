@@ -24,6 +24,9 @@ export interface Page {
   diff_threshold: number;
   ignore_selectors: string[];
   wait_for_selector: string | null;
+  scroll_to_bottom: boolean;
+  max_scrolls: number;
+  wait_seconds: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
