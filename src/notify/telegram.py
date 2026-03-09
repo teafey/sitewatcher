@@ -52,12 +52,18 @@ class TelegramNotifier(BaseNotifier):
             else:
                 change_type = "текстовый"
 
+            # Viewport info
+            vw = snapshot.get("viewport_width")
+            vh = snapshot.get("viewport_height")
+            viewport_str = f"{vw}x{vh}" if vw and vh else ""
+
             text = (
                 f"\U0001f534 *{_escape_md(name)}*\n"
                 f"URL: {_escape_md(url)}\n"
                 f"Diff: {diff_percent:.2f}%\n"
                 f"Тип: {change_type}\n"
-                f"Время: {_escape_md(captured_at)}"
+                + (f"Viewport: {_escape_md(viewport_str)}\n" if viewport_str else "")
+                + f"Время: {_escape_md(captured_at)}"
             )
 
             diff_image_path = snapshot.get("diff_image_path")

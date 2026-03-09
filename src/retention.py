@@ -49,29 +49,36 @@ async def _cleanup_page(page_id: str, max_versions: int) -> tuple[int, int]:
     if len(all_snapshots) <= 1:
         return 0, 0  # Keep at least the current baseline
 
-    # Always keep the latest snapshot
-    latest = all_snapshots[0]
-    rest = all_snapshots[1:]
-
-    # Among the rest, keep up to max_versions with changes
-    changed = [s for s in rest if s.get("has_changes")]
-    unchanged = [s for s in rest if not s.get("has_changes")]
-
-    # Keep the most recent changed snapshots up to limit
-    to_keep_changed = changed[:max_versions]
-    to_delete = changed[max_versions:] + unchanged
+    # Group snapshots by viewport for per-viewport retention
+    viewport_groups: dict[tuple[int | None, int | None], list[dict]] = {}
+    for snap in all_snapshots:
+        key = (snap.get("viewport_width"), snap.get("viewport_height"))
+        viewport_groups.setdefault(key, []).append(snap)
 
     deleted_count = 0
     freed_bytes = 0
 
-    for snapshot in to_delete:
-        freed = _delete_snapshot_files(snapshot)
-        freed_bytes += freed
-        try:
-            await db.delete_snapshot(snapshot["id"])
-            deleted_count += 1
-        except Exception as exc:
-            logger.warning("Failed to delete snapshot %s: %s", snapshot["id"], exc)
+    for _vp_key, vp_snapshots in viewport_groups.items():
+        if len(vp_snapshots) <= 1:
+            continue
+
+        # Always keep the latest snapshot per viewport
+        rest = vp_snapshots[1:]
+
+        # Among the rest, keep up to max_versions with changes
+        changed = [s for s in rest if s.get("has_changes")]
+        unchanged = [s for s in rest if not s.get("has_changes")]
+
+        to_delete = changed[max_versions:] + unchanged
+
+        for snapshot in to_delete:
+            freed = _delete_snapshot_files(snapshot)
+            freed_bytes += freed
+            try:
+                await db.delete_snapshot(snapshot["id"])
+                deleted_count += 1
+            except Exception as exc:
+                logger.warning("Failed to delete snapshot %s: %s", snapshot["id"], exc)
 
     return deleted_count, freed_bytes
 

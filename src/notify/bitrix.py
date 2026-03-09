@@ -29,12 +29,18 @@ class BitrixNotifier(BaseNotifier):
 
             dashboard_link = f"{settings.dashboard_url}/pages/{page['id']}"
 
+            # Viewport info
+            vw = snapshot.get("viewport_width")
+            vh = snapshot.get("viewport_height")
+            viewport_str = f"Viewport: {vw}x{vh}\n" if vw and vh else ""
+
             message = (
                 f"[b]SiteWatcher: изменения обнаружены[/b]\n\n"
                 f"Страница: [b]{name}[/b]\n"
                 f"URL: {url}\n"
                 f"Различия: {diff_percent:.2f}%\n"
-                f"Время: {captured_at}\n\n"
+                + viewport_str
+                + f"Время: {captured_at}\n\n"
                 f"[url={dashboard_link}]Открыть в дашборде[/url]"
             )
 

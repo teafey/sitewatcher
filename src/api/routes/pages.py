@@ -28,6 +28,17 @@ async def get_page(page_id: str):
 @router.post("", response_model=PageResponse, status_code=201)
 async def create_page(data: PageCreate, background_tasks: BackgroundTasks):
     page_data = data.model_dump(exclude_none=True)
+
+    # If viewports provided, serialize to dicts for JSONB and set compat fields
+    if data.viewports:
+        page_data["viewports"] = [v.model_dump() for v in data.viewports]
+        # Keep viewport_width/viewport_height as first viewport for backward compat
+        page_data["viewport_width"] = data.viewports[0].width
+        page_data["viewport_height"] = data.viewports[0].height
+    else:
+        # Construct viewports from single viewport fields
+        page_data["viewports"] = [{"width": data.viewport_width, "height": data.viewport_height}]
+
     page = await db.create_page(page_data)
 
     # Trigger baseline capture in background
@@ -46,6 +57,12 @@ async def update_page(page_id: str, data: PageUpdate):
     update_data = data.model_dump(exclude_none=True)
     if not update_data:
         return existing
+
+    # Serialize viewports for JSONB and set compat fields
+    if data.viewports:
+        update_data["viewports"] = [v.model_dump() for v in data.viewports]
+        update_data["viewport_width"] = data.viewports[0].width
+        update_data["viewport_height"] = data.viewports[0].height
 
     updated = await db.update_page(page_id, update_data)
     if not updated:

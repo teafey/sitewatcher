@@ -18,13 +18,20 @@ async def list_snapshots(
     limit: int = 20,
     offset: int = 0,
     changes_only: bool = False,
+    viewport_width: int | None = None,
+    viewport_height: int | None = None,
 ):
     page = await db.get_page(page_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
 
     snapshots = await db.get_snapshots(
-        page_id, limit=limit, offset=offset, changes_only=changes_only,
+        page_id,
+        limit=limit,
+        offset=offset,
+        changes_only=changes_only,
+        viewport_width=viewport_width,
+        viewport_height=viewport_height,
     )
     return snapshots
 

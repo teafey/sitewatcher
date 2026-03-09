@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import shutil
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -14,7 +13,7 @@ from src.diff import compare
 
 logger = logging.getLogger(__name__)
 
-_executor = ThreadPoolExecutor(max_workers=2)
+_executor = ThreadPoolExecutor(max_workers=1)
 
 
 def _run_sync(func, *args, **kwargs):
@@ -76,20 +75,54 @@ async def _check_page(
     page_id = page["id"]
     logger.info("Checking page: %s", page_name)
 
+    # Extract viewports (multi-viewport or fallback to single)
+    viewports_raw = page.get("viewports")
+    if viewports_raw and isinstance(viewports_raw, list) and len(viewports_raw) > 0:
+        viewports = [(v["width"], v["height"]) for v in viewports_raw]
+    else:
+        viewports = [(page.get("viewport_width", 1920), page.get("viewport_height", 1080))]
+
+    combined_result: dict[str, Any] = {"has_changes": False, "diff_percent": 0.0}
+
+    for vw, vh in viewports:
+        result = await _check_page_viewport(page, capture_engine, vw, vh)
+        if result.get("error"):
+            combined_result.setdefault("errors", []).append(result["error"])
+        if result.get("has_changes"):
+            combined_result["has_changes"] = True
+        if (result.get("diff_percent") or 0) > (combined_result.get("diff_percent") or 0):
+            combined_result["diff_percent"] = result["diff_percent"]
+
+    return combined_result
+
+
+async def _check_page_viewport(
+    page: dict[str, Any],
+    capture_engine: PageCapture,
+    viewport_width: int,
+    viewport_height: int,
+) -> dict[str, Any]:
+    page_name = page.get("name") or page["url"]
+    page_id = page["id"]
+    viewport_label = f"{viewport_width}x{viewport_height}"
+    logger.info("Checking page: %s [%s]", page_name, viewport_label)
+
     # Capture with retry
-    capture_result = await _capture_with_retry(page, capture_engine)
+    capture_result = await _capture_with_retry(page, capture_engine, viewport=(viewport_width, viewport_height))
 
     if capture_result.error:
         # Save error snapshot
         await db.create_snapshot({
             "page_id": page_id,
             "error_message": capture_result.error,
+            "viewport_width": viewport_width,
+            "viewport_height": viewport_height,
         })
-        logger.warning("Capture failed for %s: %s", page_name, capture_result.error)
+        logger.warning("Capture failed for %s [%s]: %s", page_name, viewport_label, capture_result.error)
         return {"has_changes": False, "error": capture_result.error}
 
-    # Get previous snapshot
-    prev_snapshot = await db.get_latest_snapshot(page_id)
+    # Get previous snapshot for this viewport
+    prev_snapshot = await db.get_latest_snapshot(page_id, viewport_width=viewport_width, viewport_height=viewport_height)
 
     # Compare if we have a previous snapshot
     has_changes = False
@@ -127,18 +160,17 @@ async def _check_page(
         "diff_image_path": diff_image_path,
         "text_diff": text_diff_str if text_diff_str else None,
         "has_changes": has_changes,
+        "viewport_width": viewport_width,
+        "viewport_height": viewport_height,
     }
     new_snapshot = await db.create_snapshot(snapshot_data)
 
     # Notify if changes detected
     if has_changes:
-        logger.info("Changes detected for %s (%.2f%%)", page_name, diff_percent or 0)
+        logger.info("Changes detected for %s [%s] (%.2f%%)", page_name, viewport_label, diff_percent or 0)
         await _notify(page, new_snapshot)
     else:
-        logger.info("No changes for %s", page_name)
-        # Cleanup previous snapshot files if no changes
-        if prev_snapshot and prev_snapshot.get("screenshot_path"):
-            await _cleanup_old_snapshot(prev_snapshot)
+        logger.info("No changes for %s [%s]", page_name, viewport_label)
 
     return {"has_changes": has_changes, "diff_percent": diff_percent}
 
@@ -147,10 +179,12 @@ async def _capture_with_retry(
     page: dict[str, Any],
     capture_engine: PageCapture,
     max_retries: int = 3,
+    viewport: tuple[int, int] | None = None,
 ) -> CaptureResult:
     """Capture with exponential backoff retry."""
+    result: CaptureResult | None = None
     for attempt in range(max_retries):
-        result = await _run_sync(capture_engine.capture, page)
+        result = await _run_sync(capture_engine.capture, page, viewport=viewport)
         if result.error is None:
             return result
         if attempt < max_retries - 1:
@@ -160,7 +194,7 @@ async def _capture_with_retry(
                 attempt + 1, page["url"], delay,
             )
             await asyncio.sleep(delay)
-    return result
+    return result  # type: ignore[return-value]
 
 
 async def _notify(page: dict[str, Any], snapshot: dict[str, Any]) -> None:
@@ -172,16 +206,3 @@ async def _notify(page: dict[str, Any], snapshot: dict[str, Any]) -> None:
             logger.error("Notification failed via %s: %s", type(notifier).__name__, exc)
 
 
-async def _cleanup_old_snapshot(snapshot: dict[str, Any]) -> None:
-    """Remove previous snapshot files and DB record when no changes detected."""
-    screenshot_path = snapshot.get("screenshot_path")
-    if screenshot_path:
-        snapshot_dir = Path(screenshot_path).parent
-        if snapshot_dir.exists():
-            shutil.rmtree(snapshot_dir, ignore_errors=True)
-            logger.debug("Cleaned up old snapshot dir: %s", snapshot_dir)
-
-    try:
-        await db.delete_snapshot(snapshot["id"])
-    except Exception as exc:
-        logger.warning("Failed to delete old snapshot record: %s", exc)

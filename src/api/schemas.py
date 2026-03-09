@@ -6,11 +6,17 @@ from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
 
 
+class Viewport(BaseModel):
+    width: int = Field(ge=320, le=3840)
+    height: int = Field(ge=240, le=2160)
+
+
 class PageCreate(BaseModel):
     url: str = Field(..., min_length=1)
     name: str | None = None
     viewport_width: int = Field(default=1920, ge=320, le=3840)
     viewport_height: int = Field(default=1080, ge=240, le=2160)
+    viewports: list[Viewport] | None = None
     check_interval_hours: int = Field(default=24, ge=1, le=720)
     diff_threshold: float = Field(default=0.5, ge=0.0, le=100.0)
     ignore_selectors: list[str] = Field(default_factory=list)
@@ -26,6 +32,7 @@ class PageUpdate(BaseModel):
     name: str | None = None
     viewport_width: int | None = Field(default=None, ge=320, le=3840)
     viewport_height: int | None = Field(default=None, ge=240, le=2160)
+    viewports: list[Viewport] | None = None
     check_interval_hours: int | None = Field(default=None, ge=1, le=720)
     diff_threshold: float | None = Field(default=None, ge=0.0, le=100.0)
     ignore_selectors: list[str] | None = None
@@ -42,6 +49,7 @@ class PageResponse(BaseModel):
     name: str | None
     viewport_width: int
     viewport_height: int
+    viewports: list[dict] | None = None
     check_interval_hours: int
     diff_threshold: float
     ignore_selectors: list[str]
@@ -63,6 +71,8 @@ class SnapshotResponse(BaseModel):
     diff_image_path: str | None
     has_changes: bool | None
     error_message: str | None
+    viewport_width: int | None = None
+    viewport_height: int | None = None
     captured_at: str
 
 

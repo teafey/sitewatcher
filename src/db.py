@@ -97,15 +97,24 @@ async def create_snapshot(snapshot_data: dict[str, Any]) -> dict[str, Any]:
         return resp.json()[0]
 
 
-async def get_latest_snapshot(page_id: str | UUID) -> dict[str, Any] | None:
+async def get_latest_snapshot(
+    page_id: str | UUID,
+    viewport_width: int | None = None,
+    viewport_height: int | None = None,
+) -> dict[str, Any] | None:
+    params: dict[str, str] = {
+        "page_id": f"eq.{page_id}",
+        "order": "captured_at.desc",
+        "limit": "1",
+    }
+    if viewport_width is not None:
+        params["viewport_width"] = f"eq.{viewport_width}"
+    if viewport_height is not None:
+        params["viewport_height"] = f"eq.{viewport_height}"
     async with _client() as client:
         resp = await client.get(
             f"{BASE_URL}/snapshots",
-            params={
-                "page_id": f"eq.{page_id}",
-                "order": "captured_at.desc",
-                "limit": "1",
-            },
+            params=params,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -117,6 +126,8 @@ async def get_snapshots(
     limit: int = 20,
     offset: int = 0,
     changes_only: bool = False,
+    viewport_width: int | None = None,
+    viewport_height: int | None = None,
 ) -> list[dict[str, Any]]:
     params: dict[str, str] = {
         "page_id": f"eq.{page_id}",
@@ -126,6 +137,10 @@ async def get_snapshots(
     }
     if changes_only:
         params["has_changes"] = "eq.true"
+    if viewport_width is not None:
+        params["viewport_width"] = f"eq.{viewport_width}"
+    if viewport_height is not None:
+        params["viewport_height"] = f"eq.{viewport_height}"
     async with _client() as client:
         resp = await client.get(f"{BASE_URL}/snapshots", params=params)
         resp.raise_for_status()
