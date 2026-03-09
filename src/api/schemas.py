@@ -15,6 +15,9 @@ class PageCreate(BaseModel):
     diff_threshold: float = Field(default=0.5, ge=0.0, le=100.0)
     ignore_selectors: list[str] = Field(default_factory=list)
     wait_for_selector: str | None = None
+    scroll_to_bottom: bool = True
+    max_scrolls: int = Field(default=10, ge=1, le=100)
+    wait_seconds: int = Field(default=3, ge=1, le=30)
     is_active: bool = True
 
 
@@ -27,6 +30,9 @@ class PageUpdate(BaseModel):
     diff_threshold: float | None = Field(default=None, ge=0.0, le=100.0)
     ignore_selectors: list[str] | None = None
     wait_for_selector: str | None = None
+    scroll_to_bottom: bool | None = None
+    max_scrolls: int | None = Field(default=None, ge=1, le=100)
+    wait_seconds: int | None = Field(default=None, ge=1, le=30)
     is_active: bool | None = None
 
 
@@ -40,6 +46,9 @@ class PageResponse(BaseModel):
     diff_threshold: float
     ignore_selectors: list[str]
     wait_for_selector: str | None
+    scroll_to_bottom: bool
+    max_scrolls: int
+    wait_seconds: int
     is_active: bool
     created_at: str
     updated_at: str
