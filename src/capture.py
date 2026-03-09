@@ -14,6 +14,20 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _scroll_page(page: Page, viewport_height: int, max_scrolls: int) -> None:
+    """Scroll down the page to trigger lazy-loaded content."""
+    prev_height = 0
+    for i in range(max_scrolls):
+        page.evaluate(f"window.scrollBy(0, {viewport_height})")
+        page.wait_for_timeout(500)
+        current_height = page.evaluate("document.body.scrollHeight")
+        if current_height == prev_height:
+            break
+        prev_height = current_height
+    # Scroll back to top
+    page.evaluate("window.scrollTo(0, 0)")
+
+
 @dataclass
 class CaptureResult:
     screenshot_path: str | None = None
@@ -64,6 +78,9 @@ class PageCapture:
         viewport_height = page_config.get("viewport_height", 1080)
         wait_for = page_config.get("wait_for_selector")
         ignore_selectors: list[str] = page_config.get("ignore_selectors") or []
+        scroll_to_bottom = page_config.get("scroll_to_bottom", True)
+        max_scrolls = page_config.get("max_scrolls", 10)
+        wait_seconds = page_config.get("wait_seconds", 3)
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         output_dir = settings.data_dir / str(page_id) / timestamp
@@ -79,9 +96,15 @@ class PageCapture:
             page: Page = context.new_page()
 
             logger.info("Navigating to %s (viewport: %dx%d)", url, viewport_width, viewport_height)
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            page.goto(url, wait_until="networkidle", timeout=60000)
+
+            # Scroll to trigger lazy-loaded content
+            if scroll_to_bottom:
+                logger.info("Scrolling page (max %d scrolls)", max_scrolls)
+                _scroll_page(page, viewport_height, max_scrolls)
+
             # Wait for visual content to settle
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(wait_seconds * 1000)
 
             if wait_for:
                 logger.info("Waiting for selector: %s", wait_for)

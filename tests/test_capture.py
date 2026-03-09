@@ -6,11 +6,11 @@ Run with: pytest tests/test_capture.py -v
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
-from src.capture import PageCapture, CaptureResult
+from src.capture import PageCapture, CaptureResult, _scroll_page
 
 
 @pytest.fixture
@@ -19,6 +19,14 @@ def data_dir():
         with patch("src.capture.settings") as mock_settings:
             mock_settings.data_dir = Path(tmpdir)
             yield Path(tmpdir)
+
+
+def _playwright_available() -> bool:
+    try:
+        from playwright.sync_api import sync_playwright
+        return True
+    except ImportError:
+        return False
 
 
 class TestCaptureResult:
@@ -72,9 +80,35 @@ class TestPageCapture:
         assert result.error is not None
 
 
-def _playwright_available() -> bool:
-    try:
-        from playwright.sync_api import sync_playwright
-        return True
-    except ImportError:
-        return False
+class TestScrollPage:
+    def test_scroll_stops_when_height_unchanged(self):
+        """Scroll should stop when page height stops changing."""
+        mock_page = MagicMock()
+        mock_page.evaluate.side_effect = [
+            None, 2000,   # scroll 1: height grows
+            None, 2000,   # scroll 2: height same → stop
+            None,         # scrollTo(0, 0)
+        ]
+        _scroll_page(mock_page, viewport_height=1080, max_scrolls=10)
+        assert mock_page.evaluate.call_count == 5  # 4 in loop + 1 scrollTo
+        assert mock_page.wait_for_timeout.call_count == 2
+
+    def test_scroll_respects_max_scrolls(self):
+        """Should stop after max_scrolls even if page keeps growing."""
+        mock_page = MagicMock()
+        heights = []
+        for i in range(4):
+            heights.append(None)
+            heights.append((i + 1) * 1080)
+        mock_page.evaluate.side_effect = heights
+        _scroll_page(mock_page, viewport_height=1080, max_scrolls=3)
+        # 3 scrolls * 2 evaluate calls each + 1 scrollTo = 7
+        assert mock_page.evaluate.call_count == 7
+
+    def test_scroll_back_to_top(self):
+        """After scrolling, should scroll back to top."""
+        mock_page = MagicMock()
+        mock_page.evaluate.side_effect = [None, 2000, None, 2000, None]
+        _scroll_page(mock_page, viewport_height=1080, max_scrolls=10)
+        last_call = mock_page.evaluate.call_args_list[-1]
+        assert "scrollTo(0, 0)" in str(last_call)
