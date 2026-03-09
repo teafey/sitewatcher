@@ -52,14 +52,13 @@ export default function ImageSlider({ beforeUrl, afterUrl }: Props) {
 
       {/* Before (clipped) */}
       <div
-        className="absolute top-0 left-0 h-full overflow-hidden"
-        style={{ width: `${position}%` }}
+        className="absolute top-0 left-0 w-full h-full overflow-hidden"
+        style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
       >
         <img
           src={beforeUrl}
           alt="Before"
-          className="block"
-          style={{ width: `${containerRef.current?.offsetWidth || 1000}px` }}
+          className="w-full block"
         />
       </div>
 

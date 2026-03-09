@@ -32,6 +32,12 @@ class PageCapture:
         self._playwright = None
         self._browser: Browser | None = None
 
+    @classmethod
+    def create(cls) -> PageCapture:
+        pc = cls()
+        pc.start()
+        return pc
+
     def start(self) -> None:
         self._playwright = sync_playwright().start()
         self._browser = self._playwright.chromium.launch(headless=True)
@@ -73,7 +79,9 @@ class PageCapture:
             page: Page = context.new_page()
 
             logger.info("Navigating to %s (viewport: %dx%d)", url, viewport_width, viewport_height)
-            page.goto(url, wait_until="networkidle", timeout=30000)
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            # Wait for visual content to settle
+            page.wait_for_timeout(3000)
 
             if wait_for:
                 logger.info("Waiting for selector: %s", wait_for)

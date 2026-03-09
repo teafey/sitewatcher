@@ -10,13 +10,44 @@ interface Props {
 
 export default function PageCard({ page, onDelete, onToggle }: Props) {
   const [latestSnapshot, setLatestSnapshot] = useState<Snapshot | null>(null);
+  const [checking, setChecking] = useState(false);
 
-  useEffect(() => {
+  const loadSnapshot = () => {
     api
       .getSnapshots(page.id, { limit: 1 })
       .then((snaps) => setLatestSnapshot(snaps[0] || null))
       .catch(console.error);
+  };
+
+  useEffect(() => {
+    loadSnapshot();
   }, [page.id]);
+
+  const handleCheck = async () => {
+    if (checking) return;
+    setChecking(true);
+    try {
+      await api.triggerCheckPage(page.id);
+      const prevId = latestSnapshot?.id;
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const snaps = await api.getSnapshots(page.id, { limit: 1 });
+          if ((snaps[0] && snaps[0].id !== prevId) || attempts >= 20) {
+            clearInterval(poll);
+            setLatestSnapshot(snaps[0] || null);
+            setChecking(false);
+          }
+        } catch {
+          clearInterval(poll);
+          setChecking(false);
+        }
+      }, 3000);
+    } catch {
+      setChecking(false);
+    }
+  };
 
   const status = getStatus(page, latestSnapshot);
 
@@ -70,15 +101,11 @@ export default function PageCard({ page, onDelete, onToggle }: Props) {
         {/* Actions */}
         <div className="flex gap-2 mt-3">
           <button
-            onClick={() =>
-              api
-                .triggerCheckPage(page.id)
-                .then(() => alert("Проверка запущена"))
-                .catch(console.error)
-            }
-            className="flex-1 text-xs px-3 py-1.5 bg-accent/10 text-accent-light border border-accent/20 rounded-lg hover:bg-accent/20 transition"
+            onClick={handleCheck}
+            disabled={checking}
+            className="flex-1 text-xs px-3 py-1.5 bg-accent/10 text-accent-light border border-accent/20 rounded-lg hover:bg-accent/20 transition disabled:opacity-50"
           >
-            Проверить
+            {checking ? "Проверяю..." : "Проверить"}
           </button>
           <button
             onClick={() => onToggle(page.id, !page.is_active)}

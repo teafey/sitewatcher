@@ -17,20 +17,57 @@ export default function PageDetail() {
   const [viewMode, setViewMode] = useState<"side-by-side" | "overlay" | "diff">(
     "side-by-side"
   );
+  const [checking, setChecking] = useState(false);
 
-  useEffect(() => {
+  const loadSnapshots = (selectFirst = true) => {
     if (!pageId) return;
-    api.getPage(pageId).then(setPage).catch(console.error);
     api
       .getSnapshots(pageId, { limit: 50 })
       .then((snaps) => {
         setSnapshots(snaps);
-        if (snaps.length > 0) {
+        if (selectFirst && snaps.length > 0) {
           setSelectedSnapshot(snaps[0]);
           if (snaps.length > 1) setPrevSnapshot(snaps[1]);
         }
       })
       .catch(console.error);
+  };
+
+  const handleCheck = async () => {
+    if (!page || checking) return;
+    setChecking(true);
+    try {
+      await api.triggerCheckPage(page.id);
+      // Poll for new snapshot
+      const prevCount = snapshots.length;
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const snaps = await api.getSnapshots(page.id, { limit: 50 });
+          if (snaps.length > prevCount || attempts >= 20) {
+            clearInterval(poll);
+            setSnapshots(snaps);
+            if (snaps.length > 0) {
+              setSelectedSnapshot(snaps[0]);
+              if (snaps.length > 1) setPrevSnapshot(snaps[1]);
+            }
+            setChecking(false);
+          }
+        } catch {
+          clearInterval(poll);
+          setChecking(false);
+        }
+      }, 3000);
+    } catch {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!pageId) return;
+    api.getPage(pageId).then(setPage).catch(console.error);
+    loadSnapshots();
   }, [pageId]);
 
   useEffect(() => {
@@ -86,12 +123,11 @@ export default function PageDetail() {
               Настройки
             </Link>
             <button
-              onClick={() =>
-                api.triggerCheckPage(page.id).catch(console.error)
-              }
-              className="text-xs px-4 py-2 bg-accent/10 text-accent-light border border-accent/20 rounded-lg hover:bg-accent/20 transition"
+              onClick={handleCheck}
+              disabled={checking}
+              className="text-xs px-4 py-2 bg-accent/10 text-accent-light border border-accent/20 rounded-lg hover:bg-accent/20 transition disabled:opacity-50"
             >
-              Проверить сейчас
+              {checking ? "Проверяю..." : "Проверить сейчас"}
             </button>
           </div>
         </div>

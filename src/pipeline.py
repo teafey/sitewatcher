@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,18 @@ from src.diff import compare
 
 logger = logging.getLogger(__name__)
 
+_executor = ThreadPoolExecutor(max_workers=2)
+
+
+def _run_sync(func, *args, **kwargs):
+    """Run sync function in executor without copying contextvars."""
+    loop = asyncio.get_running_loop()
+    if kwargs:
+        import functools
+        func = functools.partial(func, *args, **kwargs)
+        return loop.run_in_executor(_executor, func)
+    return loop.run_in_executor(_executor, func, *args)
+
 
 async def run_check_cycle() -> dict[str, Any]:
     """Run a full check cycle for all active pages."""
@@ -21,7 +34,8 @@ async def run_check_cycle() -> dict[str, Any]:
 
     results = {"checked": 0, "changes": 0, "errors": 0}
 
-    with PageCapture() as capture_engine:
+    capture_engine = await _run_sync(PageCapture.create)
+    try:
         for page in pages:
             try:
                 result = await _check_page(page, capture_engine)
@@ -31,6 +45,8 @@ async def run_check_cycle() -> dict[str, Any]:
             except Exception as exc:
                 results["errors"] += 1
                 logger.error("Failed to check page %s: %s", page.get("name", page["id"]), exc)
+    finally:
+        await _run_sync(capture_engine.stop)
 
     logger.info(
         "Check cycle complete: %d checked, %d changes, %d errors",
@@ -45,8 +61,11 @@ async def check_single_page(page_id: str) -> dict[str, Any]:
     if not page:
         raise ValueError(f"Page {page_id} not found")
 
-    with PageCapture() as capture_engine:
+    capture_engine = await _run_sync(PageCapture.create)
+    try:
         return await _check_page(page, capture_engine)
+    finally:
+        await _run_sync(capture_engine.stop)
 
 
 async def _check_page(
@@ -83,7 +102,8 @@ async def _check_page(
         prev_dom = prev_snapshot.get("dom_text", "")
 
         output_dir = Path(capture_result.screenshot_path).parent if capture_result.screenshot_path else settings.data_dir
-        diff_result = compare(
+        diff_result = await _run_sync(
+            compare,
             old_screenshot_path=prev_screenshot,
             old_dom_text=prev_dom,
             new_screenshot_path=capture_result.screenshot_path,
@@ -130,7 +150,7 @@ async def _capture_with_retry(
 ) -> CaptureResult:
     """Capture with exponential backoff retry."""
     for attempt in range(max_retries):
-        result = capture_engine.capture(page)
+        result = await _run_sync(capture_engine.capture, page)
         if result.error is None:
             return result
         if attempt < max_retries - 1:
