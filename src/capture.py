@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _scroll_page(page: Page, viewport_height: int, max_scrolls: int) -> None:
     """Scroll down the page to trigger lazy-loaded content."""
     prev_height = 0
-    for i in range(max_scrolls):
+    for _ in range(max_scrolls):
         page.evaluate(f"window.scrollBy(0, {viewport_height})")
         page.wait_for_timeout(500)
         current_height = page.evaluate("document.body.scrollHeight")
