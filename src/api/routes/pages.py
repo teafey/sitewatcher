@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from src import db
@@ -55,4 +58,15 @@ async def delete_page(page_id: str):
     existing = await db.get_page(page_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Page not found")
+
+    # Delete snapshot files from disk before cascade removes DB records
+    snapshots = await db.get_snapshots(page_id, limit=10000)
+    for snap in snapshots:
+        for path_key in ("screenshot_path", "diff_image_path"):
+            path_str = snap.get(path_key)
+            if path_str:
+                parent = Path(path_str).parent
+                if parent.exists():
+                    shutil.rmtree(parent, ignore_errors=True)
+
     await db.delete_page(page_id)
