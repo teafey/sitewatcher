@@ -34,12 +34,17 @@ class TestPagesAPI:
                 "id": "test-id",
                 "url": "https://example.com",
                 "name": "Test",
+                "project_id": "project-id",
                 "viewport_width": 1920,
                 "viewport_height": 1080,
+                "viewports": [{"width": 1920, "height": 1080}],
                 "check_interval_hours": 24,
                 "diff_threshold": 0.5,
                 "ignore_selectors": [],
                 "wait_for_selector": None,
+                "scroll_to_bottom": True,
+                "max_scrolls": 10,
+                "wait_seconds": 3,
                 "is_active": True,
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-01-01T00:00:00Z",
@@ -55,18 +60,33 @@ class TestPagesAPI:
         resp = client.get("/api/pages/nonexistent")
         assert resp.status_code == 404
 
+    @patch("src.pipeline.check_single_page", new_callable=AsyncMock)
     @patch("src.db.create_page", new_callable=AsyncMock)
-    def test_create_page(self, mock_create, client):
+    @patch("src.db.resolve_project_for_url", new_callable=AsyncMock)
+    def test_create_page(self, mock_resolve_project, mock_create, mock_check, client):
+        mock_resolve_project.return_value = {
+            "id": "project-id",
+            "name": "example.com",
+            "base_url": "https://example.com",
+            "hostname": "example.com",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
         mock_create.return_value = {
             "id": "new-id",
             "url": "https://example.com",
             "name": "New Page",
+            "project_id": "project-id",
             "viewport_width": 1920,
             "viewport_height": 1080,
+            "viewports": [{"width": 1920, "height": 1080}],
             "check_interval_hours": 24,
             "diff_threshold": 0.5,
             "ignore_selectors": [],
             "wait_for_selector": None,
+            "scroll_to_bottom": True,
+            "max_scrolls": 10,
+            "wait_seconds": 3,
             "is_active": True,
             "created_at": "2026-01-01T00:00:00Z",
             "updated_at": "2026-01-01T00:00:00Z",
@@ -76,6 +96,54 @@ class TestPagesAPI:
             json={"url": "https://example.com", "name": "New Page"},
         )
         assert resp.status_code == 201
+        assert resp.json()["project_id"] == "project-id"
+        mock_create.assert_awaited_once()
+        created_payload = mock_create.await_args.args[0]
+        assert created_payload["project_id"] == "project-id"
+
+    @patch("src.pipeline.check_single_page", new_callable=AsyncMock)
+    @patch("src.db.create_page", new_callable=AsyncMock)
+    @patch("src.db.get_project", new_callable=AsyncMock)
+    def test_create_page_with_project_id(self, mock_get_project, mock_create, mock_check, client):
+        mock_get_project.return_value = {
+            "id": "project-id",
+            "name": "Example",
+            "base_url": "https://example.com",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        mock_create.return_value = {
+            "id": "new-id",
+            "url": "https://example.com/path",
+            "name": "New Page",
+            "project_id": "project-id",
+            "viewport_width": 1920,
+            "viewport_height": 1080,
+            "viewports": [{"width": 1920, "height": 1080}],
+            "check_interval_hours": 24,
+            "diff_threshold": 0.5,
+            "ignore_selectors": [],
+            "wait_for_selector": None,
+            "scroll_to_bottom": True,
+            "max_scrolls": 10,
+            "wait_seconds": 3,
+            "is_active": True,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+
+        resp = client.post(
+            "/api/pages",
+            json={
+                "url": "https://example.com/path",
+                "name": "New Page",
+                "project_id": "project-id",
+            },
+        )
+
+        assert resp.status_code == 201
+        created_payload = mock_create.await_args.args[0]
+        assert created_payload["project_id"] == "project-id"
 
     def test_create_page_invalid_viewport(self, client):
         resp = client.post(

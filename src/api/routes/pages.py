@@ -29,6 +29,18 @@ async def get_page(page_id: str):
 async def create_page(data: PageCreate, background_tasks: BackgroundTasks):
     page_data = data.model_dump(exclude_none=True)
 
+    try:
+        if data.project_id:
+            project = await db.get_project(data.project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            page_data["project_id"] = project["id"]
+        else:
+            project = await db.resolve_project_for_url(data.url)
+            page_data["project_id"] = project["id"]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     # If viewports provided, serialize to dicts for JSONB and set compat fields
     if data.viewports:
         page_data["viewports"] = [v.model_dump() for v in data.viewports]
@@ -57,6 +69,18 @@ async def update_page(page_id: str, data: PageUpdate):
     update_data = data.model_dump(exclude_none=True)
     if not update_data:
         return existing
+
+    try:
+        if data.project_id:
+            project = await db.get_project(data.project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            update_data["project_id"] = project["id"]
+        elif data.url:
+            project = await db.resolve_project_for_url(data.url)
+            update_data["project_id"] = project["id"]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Serialize viewports for JSONB and set compat fields
     if data.viewports:

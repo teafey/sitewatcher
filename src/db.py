@@ -6,6 +6,7 @@ from uuid import UUID
 
 import httpx
 
+from src.project_utils import extract_hostname, normalize_base_url
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,19 @@ async def get_all_pages() -> list[dict[str, Any]]:
         resp = await client.get(
             f"{BASE_URL}/pages",
             params={"order": "created_at.desc"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_project_pages(project_id: str | UUID) -> list[dict[str, Any]]:
+    async with _client() as client:
+        resp = await client.get(
+            f"{BASE_URL}/pages",
+            params={
+                "project_id": f"eq.{project_id}",
+                "order": "created_at.desc",
+            },
         )
         resp.raise_for_status()
         return resp.json()
@@ -85,6 +99,116 @@ async def delete_page(page_id: str | UUID) -> bool:
         )
         resp.raise_for_status()
         return True
+
+
+# ── Projects ───────────────────────────────────────────
+
+
+async def get_all_projects() -> list[dict[str, Any]]:
+    async with _client() as client:
+        resp = await client.get(
+            f"{BASE_URL}/projects",
+            params={"order": "created_at.desc"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_project(project_id: str | UUID) -> dict[str, Any] | None:
+    async with _client() as client:
+        resp = await client.get(
+            f"{BASE_URL}/projects",
+            params={"id": f"eq.{project_id}"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None
+
+
+async def get_project_by_hostname(hostname: str) -> dict[str, Any] | None:
+    async with _client() as client:
+        resp = await client.get(
+            f"{BASE_URL}/projects",
+            params={"hostname": f"eq.{hostname}", "limit": "1"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None
+
+
+async def create_project(project_data: dict[str, Any]) -> dict[str, Any]:
+    async with _client() as client:
+        resp = await client.post(f"{BASE_URL}/projects", json=project_data)
+        resp.raise_for_status()
+        return resp.json()[0]
+
+
+async def update_project(project_id: str | UUID, project_data: dict[str, Any]) -> dict[str, Any] | None:
+    async with _client() as client:
+        resp = await client.patch(
+            f"{BASE_URL}/projects",
+            params={"id": f"eq.{project_id}"},
+            json=project_data,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None
+
+
+async def resolve_project_for_url(url: str) -> dict[str, Any]:
+    hostname = extract_hostname(url)
+    existing = await get_project_by_hostname(hostname)
+    if existing:
+        return existing
+    return await create_project(
+        {
+            "name": hostname,
+            "base_url": normalize_base_url(url),
+            "hostname": hostname,
+        }
+    )
+
+
+async def prepare_project_payload(name: str, base_url: str) -> dict[str, str]:
+    hostname = extract_hostname(base_url)
+    return {
+        "name": name.strip(),
+        "base_url": normalize_base_url(base_url),
+        "hostname": hostname,
+    }
+
+
+async def get_project_rows() -> list[dict[str, Any]]:
+    projects = await get_all_projects()
+    pages = await _get_pages_minimal()
+    latest_snapshots, _ = await _get_latest_snapshot_map()
+
+    counts_by_project: dict[str, int] = {}
+    attention_by_project: dict[str, int] = {}
+
+    for page in pages:
+        project_id = page.get("project_id")
+        if not project_id:
+            continue
+        counts_by_project[project_id] = counts_by_project.get(project_id, 0) + 1
+
+        latest = latest_snapshots.get(page["id"])
+        needs_attention = bool(
+            page.get("is_active")
+            and latest
+            and (latest.get("has_changes") or latest.get("error_message"))
+        )
+        if needs_attention:
+            attention_by_project[project_id] = attention_by_project.get(project_id, 0) + 1
+
+    return [
+        {
+            **project,
+            "pages_count": counts_by_project.get(project["id"], 0),
+            "attention_count": attention_by_project.get(project["id"], 0),
+        }
+        for project in projects
+    ]
 
 
 # ── Snapshots ──────────────────────────────────────────
@@ -189,26 +313,57 @@ async def get_snapshots_count(page_id: str | UUID, changes_only: bool = False) -
 
 
 async def get_stats() -> dict[str, Any]:
+    pages = await _get_pages_minimal()
+    projects = await get_all_projects()
+    latest_snapshots, last_snapshot_at = await _get_latest_snapshot_map()
+
+    active_pages = sum(1 for page in pages if page.get("is_active"))
+    attention_pages = sum(
+        1
+        for page in pages
+        if page.get("is_active")
+        and (
+            latest_snapshots.get(page["id"], {}).get("has_changes")
+            or latest_snapshots.get(page["id"], {}).get("error_message")
+        )
+    )
+
+    return {
+        "total_projects": len(projects),
+        "total_pages": len(pages),
+        "active_pages": active_pages,
+        "attention_pages": attention_pages,
+        "last_snapshot_at": last_snapshot_at,
+    }
+
+
+async def _get_pages_minimal() -> list[dict[str, Any]]:
     async with _client() as client:
-        pages_resp = await client.get(
+        resp = await client.get(
             f"{BASE_URL}/pages",
-            params={"select": "id,is_active"},
+            params={"select": "id,project_id,is_active"},
         )
-        pages_resp.raise_for_status()
-        pages = pages_resp.json()
+        resp.raise_for_status()
+        return resp.json()
 
-        total_pages = len(pages)
-        active_pages = sum(1 for p in pages if p.get("is_active"))
 
-        snapshots_resp = await client.get(
+async def _get_latest_snapshot_map() -> tuple[dict[str, dict[str, Any]], str | None]:
+    async with _client() as client:
+        resp = await client.get(
             f"{BASE_URL}/snapshots",
-            params={"order": "captured_at.desc", "limit": "1"},
+            params={
+                "select": "page_id,has_changes,error_message,captured_at",
+                "order": "captured_at.desc",
+            },
         )
-        snapshots_resp.raise_for_status()
-        latest = snapshots_resp.json()
+        resp.raise_for_status()
+        snapshots = resp.json()
 
-        return {
-            "total_pages": total_pages,
-            "active_pages": active_pages,
-            "last_snapshot_at": latest[0]["captured_at"] if latest else None,
-        }
+    latest_by_page: dict[str, dict[str, Any]] = {}
+    for snapshot in snapshots:
+        page_id = snapshot["page_id"]
+        if page_id not in latest_by_page:
+            latest_by_page[page_id] = snapshot
+
+    last_snapshot_at = snapshots[0]["captured_at"] if snapshots else None
+    return latest_by_page, last_snapshot_at

@@ -18,6 +18,7 @@ export interface Page {
   id: string;
   url: string;
   name: string | null;
+  project_id: string | null;
   viewport_width: number;
   viewport_height: number;
   viewports?: { width: number; height: number }[];
@@ -48,12 +49,37 @@ export interface Snapshot {
 }
 
 export interface Stats {
+  total_projects: number;
   total_pages: number;
   active_pages: number;
+  attention_pages: number;
   last_snapshot_at: string | null;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  base_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectRow extends Project {
+  pages_count: number;
+  attention_count: number;
+}
+
 export const api = {
+  // Projects
+  getProjects: () => client.get<ProjectRow[]>("/projects").then((r) => r.data),
+  getProject: (id: string) => client.get<Project>(`/projects/${id}`).then((r) => r.data),
+  createProject: (data: { name: string; base_url: string }) =>
+    client.post<Project>("/projects", data).then((r) => r.data),
+  updateProject: (id: string, data: Partial<Project>) =>
+    client.put<Project>(`/projects/${id}`, data).then((r) => r.data),
+  getProjectPages: (id: string) =>
+    client.get<Page[]>(`/projects/${id}/pages`).then((r) => r.data),
+
   // Pages
   getPages: () => client.get<Page[]>("/pages").then((r) => r.data),
   getPage: (id: string) => client.get<Page>(`/pages/${id}`).then((r) => r.data),

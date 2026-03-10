@@ -12,21 +12,13 @@ export default function StatusBar() {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <StatCard label="Всего проектов" value={stats.total_projects} />
       <StatCard label="Всего страниц" value={stats.total_pages} />
       <StatCard label="Активных" value={stats.active_pages} color="text-green-400" />
       <StatCard
-        label="С ошибками"
-        value={stats.total_pages - stats.active_pages}
+        label="Требуют внимания"
+        value={stats.attention_pages}
         color="text-red-400"
-      />
-      <StatCard
-        label="Последний снимок"
-        value={
-          stats.last_snapshot_at
-            ? new Date(stats.last_snapshot_at).toLocaleString("ru")
-            : "—"
-        }
-        small
       />
     </div>
   );

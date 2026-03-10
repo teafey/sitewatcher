@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
-from uuid import UUID
-
 from pydantic import BaseModel, Field, HttpUrl
 
 
@@ -14,6 +11,7 @@ class Viewport(BaseModel):
 class PageCreate(BaseModel):
     url: str = Field(..., min_length=1)
     name: str | None = None
+    project_id: str | None = None
     viewport_width: int = Field(default=1920, ge=320, le=3840)
     viewport_height: int = Field(default=1080, ge=240, le=2160)
     viewports: list[Viewport] | None = None
@@ -30,6 +28,7 @@ class PageCreate(BaseModel):
 class PageUpdate(BaseModel):
     url: str | None = None
     name: str | None = None
+    project_id: str | None = None
     viewport_width: int | None = Field(default=None, ge=320, le=3840)
     viewport_height: int | None = Field(default=None, ge=240, le=2160)
     viewports: list[Viewport] | None = None
@@ -47,6 +46,7 @@ class PageResponse(BaseModel):
     id: str
     url: str
     name: str | None
+    project_id: str | None = None
     viewport_width: int
     viewport_height: int
     viewports: list[dict] | None = None
@@ -77,11 +77,36 @@ class SnapshotResponse(BaseModel):
 
 
 class StatsResponse(BaseModel):
+    total_projects: int = 0
     total_pages: int
     active_pages: int
+    attention_pages: int = 0
     last_snapshot_at: str | None
     last_check_at: str | None = None
     uptime_seconds: float | None = None
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    base_url: HttpUrl
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    base_url: HttpUrl | None = None
+
+
+class ProjectResponse(BaseModel):
+    id: str
+    name: str
+    base_url: str
+    created_at: str
+    updated_at: str
+
+
+class ProjectRowResponse(ProjectResponse):
+    pages_count: int
+    attention_count: int
 
 
 class CheckResponse(BaseModel):

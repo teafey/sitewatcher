@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import api, { type Page, type Snapshot } from "../api/client";
+import api, { type Page, type Project, type Snapshot } from "../api/client";
 import SnapshotTimeline from "../components/SnapshotTimeline";
 import DiffViewer from "../components/DiffViewer";
 import TextDiff from "../components/TextDiff";
@@ -9,6 +9,7 @@ import { getViewportLabel } from "../components/ViewportPresets";
 export default function PageDetail() {
   const { pageId } = useParams<{ pageId: string }>();
   const [page, setPage] = useState<Page | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [selectedSnapshot, setSelectedSnapshot] = useState<Snapshot | null>(
     null
@@ -130,6 +131,9 @@ export default function PageDetail() {
       .getPage(pageId)
       .then((p) => {
         setPage(p);
+        if (p.project_id) {
+          api.getProject(p.project_id).then(setProject).catch(console.error);
+        }
         // Set initial active viewport
         const vps =
           p.viewports && p.viewports.length > 0
@@ -167,9 +171,20 @@ export default function PageDetail() {
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-sm text-text-muted mb-6">
         <Link to="/" className="hover:text-white transition-colors">
-          Все страницы
+          Проекты
         </Link>
         <span>/</span>
+        {project ? (
+          <>
+            <Link
+              to={`/projects/${project.id}`}
+              className="hover:text-white transition-colors"
+            >
+              {project.name}
+            </Link>
+            <span>/</span>
+          </>
+        ) : null}
         <span className="text-white">{page.name || page.url}</span>
         {selectedSnapshot && (
           <>

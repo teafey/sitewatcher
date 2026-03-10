@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routes.pages import router as pages_router
+from src.api.routes.projects import router as projects_router
 from src.api.routes.snapshots import router as snapshots_router, stats_router
 from src.api.schemas import CheckResponse, HealthResponse
 from src.config import settings
@@ -163,6 +164,7 @@ app.mount("/static/data", StaticFiles(directory=str(settings.data_dir)), name="d
 
 # Include routers
 app.include_router(pages_router)
+app.include_router(projects_router)
 app.include_router(snapshots_router)
 app.include_router(stats_router)
 

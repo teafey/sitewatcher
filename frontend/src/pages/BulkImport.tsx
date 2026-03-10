@@ -145,7 +145,7 @@ export default function BulkImport() {
             onClick={() => navigate("/")}
             className="mt-4 px-4 py-2 text-sm bg-accent text-white rounded-lg hover:bg-accent/80 transition"
           >
-            К списку страниц
+            К проектам
           </button>
         </div>
       )}

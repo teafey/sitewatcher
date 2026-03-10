@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import api from "../api/client";
+import api, { type Project } from "../api/client";
 import ViewportPresets from "../components/ViewportPresets";
 
 export default function PageForm() {
   const navigate = useNavigate();
-  const { pageId } = useParams<{ pageId: string }>();
+  const { pageId, projectId } = useParams<{ pageId: string; projectId: string }>();
   const isEdit = !!pageId;
+  const [project, setProject] = useState<Project | null>(null);
 
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
@@ -27,6 +28,9 @@ export default function PageForm() {
       api.getPage(pageId).then((page) => {
         setUrl(page.url);
         setName(page.name || "");
+        if (page.project_id) {
+          api.getProject(page.project_id).then(setProject).catch(console.error);
+        }
         // Init viewports from page.viewports or fallback to single viewport
         if (page.viewports && page.viewports.length > 0) {
           setViewports(page.viewports);
@@ -41,8 +45,10 @@ export default function PageForm() {
         setMaxScrolls(page.max_scrolls ?? 10);
         setWaitSeconds(page.wait_seconds ?? 3);
       });
+    } else if (projectId) {
+      api.getProject(projectId).then(setProject).catch(console.error);
     }
-  }, [pageId]);
+  }, [pageId, projectId]);
 
   function handleToggleViewport(w: number, h: number) {
     setViewports((prev) => {
@@ -61,6 +67,7 @@ export default function PageForm() {
     const data: Record<string, unknown> = {
       url,
       name: name || null,
+      project_id: isEdit ? projectId || null : project?.id || projectId || null,
       viewports,
       // Keep compat fields from first viewport
       viewport_width: viewports[0].width,
@@ -78,12 +85,10 @@ export default function PageForm() {
     };
 
     try {
-      if (isEdit && pageId) {
-        await api.updatePage(pageId, data);
-      } else {
-        await api.createPage(data);
-      }
-      navigate("/");
+      const savedPage = isEdit && pageId
+        ? await api.updatePage(pageId, data)
+        : await api.createPage(data);
+      navigate(savedPage.project_id ? `/projects/${savedPage.project_id}` : "/");
     } catch (err) {
       console.error("Save failed:", err);
       alert("Ошибка сохранения");
@@ -97,6 +102,15 @@ export default function PageForm() {
       <h1 className="text-xl font-bold mb-6">
         {isEdit ? "Редактирование страницы" : "Добавить страницу"}
       </h1>
+      {project && (
+        <div className="mb-6 bg-surface border border-border rounded-xl p-4">
+          <div className="text-xs uppercase tracking-wider text-text-muted mb-1">
+            Проект
+          </div>
+          <div className="text-sm text-white font-medium">{project.name}</div>
+          <div className="text-xs text-text-muted mt-1">{project.base_url}</div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* URL */}
@@ -112,6 +126,11 @@ export default function PageForm() {
             placeholder="https://example.com"
             className="w-full bg-surface-2 border border-border rounded-lg px-4 py-2.5 text-sm text-white placeholder-text-muted focus:outline-none focus:border-accent"
           />
+          {!project && !projectId && (
+            <p className="text-xs text-text-muted mt-1">
+              Проект будет определён автоматически по домену URL
+            </p>
+          )}
         </div>
 
         {/* Name */}
@@ -270,7 +289,9 @@ export default function PageForm() {
           </button>
           <button
             type="button"
-            onClick={() => navigate("/")}
+            onClick={() =>
+              navigate(project?.id || projectId ? `/projects/${project?.id || projectId}` : "/")
+            }
             className="px-6 py-2.5 bg-surface-2 text-text-dim border border-border rounded-lg hover:border-accent/30 transition"
           >
             Отмена
