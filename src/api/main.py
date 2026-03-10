@@ -147,7 +147,7 @@ app.add_middleware(
 async def api_key_middleware(request: Request, call_next):
     # Skip auth for health endpoint and static files
     path = request.url.path
-    if path in ("/api/health", "/docs", "/openapi.json") or path.startswith("/static") or path.startswith("/assets") or path == "/":
+    if path in ("/api/health", "/docs", "/openapi.json") or path.startswith("/static/") or path.startswith("/assets/") or path == "/":
         return await call_next(request)
 
     if settings.api_key:
@@ -210,7 +210,9 @@ if FRONTEND_DIR.is_dir():
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         """SPA catch-all: serve index.html for any non-API route."""
-        file = FRONTEND_DIR / full_path
+        file = (FRONTEND_DIR / full_path).resolve()
+        if not file.is_relative_to(FRONTEND_DIR):
+            return FileResponse(FRONTEND_DIR / "index.html")
         if file.is_file():
             return FileResponse(file)
         return FileResponse(FRONTEND_DIR / "index.html")
