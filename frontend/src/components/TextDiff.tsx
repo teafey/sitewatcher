@@ -16,9 +16,9 @@ export default function TextDiff({ diff }: Props) {
         {lines.map((line, i) => {
           let className = "text-text-dim";
           if (line.startsWith("+") && !line.startsWith("+++")) {
-            className = "text-green-400 bg-green-500/10";
+            className = "text-green-600 dark:text-green-400 bg-green-500/10";
           } else if (line.startsWith("-") && !line.startsWith("---")) {
-            className = "text-red-400 bg-red-500/10";
+            className = "text-red-600 dark:text-red-400 bg-red-500/10";
           } else if (line.startsWith("@@")) {
             className = "text-accent-light";
           }

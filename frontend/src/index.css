@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-bg: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-surface-2: #f8fafc;
+  --color-surface-3: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-text-primary: #1e293b;
+  --color-text-dim: #475569;
+  --color-text-muted: #94a3b8;
+  --color-accent: #2563eb;
+  --color-accent-light: #3b82f6;
+}
+
+.dark {
+  --color-bg: #0a0e17;
+  --color-surface: #111827;
+  --color-surface-2: #1a2235;
+  --color-surface-3: #1f2b3d;
+  --color-border: #2a3650;
+  --color-text-primary: #e2e8f0;
+  --color-text-dim: #8896ae;
+  --color-text-muted: #5a6a84;
+  --color-accent: #3b82f6;
+  --color-accent-light: #60a5fa;
+}
+
 body {
   font-family: "Inter", sans-serif;
   min-height: 100vh;
